@@ -1,0 +1,33 @@
+name: Pull Zephyr master
+
+on:
+  schedule:
+  - cron: "0 0 * * *"
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+    - name: clone repo
+      run: |
+        git clone git@github.com:${{ github.repository }}.git zephyr
+
+    - name: rebase to upstream zephyr
+      run: |
+        cd zephyr
+        git pull
+        git remote add zephyr https://github.com/zephyrproject-rtos/zephyr.git
+        git fetch zephyr
+        git rebase zephyr/master
+        cd ..
+
+    - name: push back to master
+      run: |
+        cd zephyr
+        git push origin main -f
+        cd ..
+
+    - name: post cleanup
+      if: always()
+      run: |
+        rm -rf zephyr

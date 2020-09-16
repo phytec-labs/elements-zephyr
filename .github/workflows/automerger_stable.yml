@@ -1,0 +1,46 @@
+name: Merge main to stable branch
+
+on:
+  schedule:
+  - cron: "0 1 * * *"
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: self-hosted
+
+    steps:
+    - name: clone repo
+      shell: bash
+      run: |
+        git clone -b stable git@github.com:${{ github.repository }}.git zephyr
+        git clone git@github.com:phytec-labs/elements-zephyr-samples-dev.git zephyr-samples
+
+    - name: merge Zephyr main
+      run: |
+        cd zephyr
+        git pull
+        git remote add zephyr https://github.com/zephyrproject-rtos/zephyr.git
+        git fetch zephyr
+        git merge zephyr/master --no-edit
+        cd ..
+
+    - name: run zephyr build
+      run: |
+        west init -l zephyr
+        west update
+        export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+        export ZEPHYR_SDK_INSTALL_DIR=/home/inspection/ci/tools/zephyr-sdk/0.11.3
+        west build -p -b th283 --build-dir ./build zephyr-samples/startup/mtimer
+
+    - name: push back to remote
+      run: |
+        cd zephyr
+        git push origin HEAD:stable
+        cd ..
+
+    - name: post cleanup
+      if: always()
+      run: |
+        rm -rf zephyr zephyr-samples .west bootloader build modules tools
