@@ -204,7 +204,13 @@ extern void k_thread_foreach_unlocked(
 
 #if defined(CONFIG_FPU_SHARING)
 /**
- * @brief thread uses floating point registers
+ * @brief FPU registers are managed by context switch
+ *
+ * @details
+ * This option indicates that the thread uses the CPU's floating point
+ * registers. This instructs the kernel to take additional steps to save
+ * and restore the contents of these registers when scheduling the thread.
+ * No effect if @option{CONFIG_FPU_SHARING} is not enabled.
  */
 #define K_FP_REGS (BIT(1))
 #endif
@@ -712,11 +718,12 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  * static priority.  Threads at different priorities will be scheduled
  * according to their static priority.
  *
- * @note Deadlines that are negative (i.e. in the past) are still seen
- * as higher priority than others, even if the thread has "finished"
- * its work.  If you don't want it scheduled anymore, you have to
- * reset the deadline into the future, block/pend the thread, or
- * modify its priority with k_thread_priority_set().
+ * @note Deadlines are stored internally using 32 bit unsigned
+ * integers.  The number of cycles between the "first" deadline in the
+ * scheduler queue and the "last" deadline must be less than 2^31 (i.e
+ * a signed non-negative quantity).  Failure to adhere to this rule
+ * may result in scheduled threads running in an incorrect dealine
+ * order.
  *
  * @note Despite the API naming, the scheduler makes no guarantees the
  * the thread WILL be scheduled within that deadline, nor does it take

@@ -8,7 +8,7 @@ include: base.yaml
 bus: i2c
 
 properties:
-    clock-frequency :
+    clock-frequency:
       type: int
       required: false
       description: Initial clock frequency in Hz
