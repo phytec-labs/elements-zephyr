@@ -2,8 +2,8 @@
 
 .. _zephyr_2.5:
 
-Zephyr 2.5.0 (Working Draft)
-############################
+Zephyr 2.5.0
+#############
 
 We are pleased to announce the release of Zephyr RTOS version 2.5.0.
 
@@ -16,8 +16,6 @@ Major enhancements with this release include:
 * Added support for building with LLVM on X86
 * Added new synchronization mechanisms using Condition Variables
 * Add support for demand paging, initial support on X86.
-* Added support for the SPARC architecture, compatible with the SPARC V8
-  specification and the SPARC ABI.
 
 The following sections provide detailed lists of changes by component.
 
@@ -411,20 +409,10 @@ Drivers and Sensors
 
   * Added NXP LPC driver.
 
-* Console
-
-* Counter
-
-* Crypto
-
 * DAC
 
   * STM32: Enabled support for G0 and H7 series.
   * Added TI DACx3608 driver.
-
-* Debug
-
-* Display
 
 * DMA
 
@@ -434,10 +422,6 @@ Drivers and Sensors
 
   * Marked the EEPROM API as stable.
   * Added support for AT24Cxx devices.
-
-* Entropy
-
-* ESPI
 
 * Ethernet
 
@@ -494,16 +478,6 @@ Drivers and Sensors
 
   * Added Cypress PSoC-6 Cortex-M0+ interrupt multiplexer driver.
 
-* IPM
-
-* Keyboard Scan
-
-* LED
-
-* LED Strip
-
-* LoRa
-
 * memc
 
   * Added FMC/SDRAM memory controller for STM32 family
@@ -549,8 +523,6 @@ Drivers and Sensors
 
   * STM32 pinmux driver has been reworked to allow pin configuration using
     devicetree definitions. The previous C macros are now deprecated.
-
-* PS/2
 
 * PWM
 
@@ -841,8 +813,6 @@ Build and Infrastructure
 Libraries / Subsystems
 **********************
 
-* Disk
-
 * File systems
 
   * API
@@ -893,22 +863,14 @@ Libraries / Subsystems
   * New power state changes notification API :c:struct:`pm_notifier`
   * Cleanup build options.
 
-* Logging
-
 * LVGL
 
   * Library has been updated to minor release v7.6.1
-
-* Shell
 
 * Storage
 
   * flash_map: Added API to get the value of an erased byte in the flash_area,
     see ``flash_area_erased_val()``.
-
-* Tracing
-
-* Debug
 
 * DFU
 
@@ -991,6 +953,19 @@ Issue Related Items
 These GitHub issues were addressed since the previous 2.4.0 tagged
 release:
 
+* :github:`32221` - Sporadic kernel panics on stm32g4 flash erase/writes
+* :github:`32203` - Cannot set static address when using hci_usb or hci_uart on nRF5340 attached to Linux Host
+* :github:`32181` - samples: tests: Tests from samples/boards/nrf/nrfx fail
+* :github:`32179` - samples: tests: Tests from samples/subsys/usb/audio fail
+* :github:`32112` - intel_adsp_cavs15: a part of testcases run failed with same error
+* :github:`31819` - intel_adsp_cavs15: signing not correct thus download firmware failed
+* :github:`31675` - [Coverity CID :216790] Division or modulo by zero in tests/drivers/can/timing/src/main.c
+* :github:`31607` - Bluetooth: host: bt_conn_auth_cb callbacks are not called when pairing to BLE 4.1 central in BT_SECURITY_L4 mode.
+* :github:`28685` - Bluetooth: Characteristic unsubscribe under indication load results in ATT timeout
+* :github:`26495` - Make k_poll work with KERNEL_COHERENCE
+* :github:`21033` - Read out heap space used and unallocated
+* :github:`19655` - Milestones toward generalized representation of timeouts
+* :github:`12028` - Enable 16550 UART driver on x86_64
 * :github:`32206` - CMSIS-DSP support seems broken on link
 * :github:`32194` - Source files missing specification of SPDX-License-Identifier in comments
 * :github:`32167` - Bluetooth: controller: conformance testcase failures
@@ -1040,7 +1015,6 @@ release:
 * :github:`31876` - west signing seems to be broken on windows
 * :github:`31867` - samples/scheduler/metairq_dispatc failed on iotdk boards
 * :github:`31858` - xtensa crt1.S hard coding
-* :github:`31854` - undefined reference to ``sys_arch_reboot``
 * :github:`31853` - Devicetree API - Getting GPIO details from pin
 * :github:`31847` - BT ISO channel. error value set, but not returned.
 * :github:`31836` - Correct values of _msg_len arg in BT_MESH_MODEL_PUB_DEFINE macro
@@ -1982,6 +1956,8 @@ release:
 * :github:`6040` - Implement flash driver for LPC54114
 * :github:`5626` - Building samples failed
 * :github:`4420` - net: tcp: RST handling is weak
+* :github:`3675` - LE Adv. Ext.: Extended Scan with PHY selection for non-conn non-scan un-directed without aux packets
+* :github:`3674` - LE Adv. Ext.: Non-Connectable and Non-Scannable Undirected without auxiliary packet
 * :github:`3893` - Enhance k_stack_push() to check k_stack->top to avoid corruption
 * :github:`3719` - Multiple consoles support.
 * :github:`3441` - IP stack: No TCP send window handling
