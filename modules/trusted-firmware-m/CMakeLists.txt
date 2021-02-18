@@ -3,6 +3,17 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# List of all partitions supported by TF-M
+# Name must match name in 'trusted-firmware-m/config/config_default.cmake'
+set(TFM_VALID_PARTITIONS
+  TFM_PARTITION_PROTECTED_STORAGE
+  TFM_PARTITION_INTERNAL_TRUSTED_STORAGE
+  TFM_PARTITION_CRYPTO
+  TFM_PARTITION_INITIAL_ATTESTATION
+  TFM_PARTITION_PLATFORM
+  TFM_PARTITION_AUDIT_LOG
+  )
+
 # Adds trusted-firmware-m as an external project.
 # Also creates a target called 'tfm_api'
 # which can be linked into the app.
@@ -18,6 +29,7 @@
 # ISOLATION_LEVEL: The TF-M isolation level to use
 # REGRESSION: Boolean if TF-M build includes building the TF-M regression tests
 # BL2: Boolean if the TF-M build uses MCUboot. Default: True
+# ENABLED_PARTITIONS: List of TFM partitions to enable.
 #
 # Example usage:
 #
@@ -27,19 +39,27 @@
 #                        IPC
 #                        ISOLATION_LEVEL 2
 #                        REGRESSION
-#                        BL2 True
-#                        BUILD_PROFILE profile_small)
+#                        BL2
+#                        BUILD_PROFILE profile_small
+#                        ENABLED_PARTITIONS TFM_PARTITION_PLATFORM TFM_PARTITION_CRYPTO)
 function(trusted_firmware_build)
-  set(options IPC REGRESSION)
-  set(oneValueArgs BINARY_DIR BOARD BL2 ISOLATION_LEVEL CMAKE_BUILD_TYPE BUILD_PROFILE)
-  cmake_parse_arguments(TFM "${options}" "${oneValueArgs}" "" ${ARGN})
+  set(options IPC REGRESSION BL2)
+  set(oneValueArgs BINARY_DIR BOARD ISOLATION_LEVEL CMAKE_BUILD_TYPE BUILD_PROFILE
+    MCUBOOT_IMAGE_NUMBER)
+  set(multiValueArgs ENABLED_PARTITIONS)
+  cmake_parse_arguments(TFM "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-  if(NOT DEFINED TFM_BL2)
-    set(TFM_BL2 True)
-  endif()
-  set(TFM_BL2_ARG "-DBL2=${TFM_BL2}")
+  foreach(partition ${TFM_VALID_PARTITIONS})
+    list(FIND TFM_ENABLED_PARTITIONS ${partition} idx)
+    if (idx EQUAL -1)
+      set(val "OFF")
+    else()
+      set(val "ON")
+    endif()
+    list(APPEND TFM_PARTITIONS_ARGS -D${partition}=${val})
+  endforeach()
 
-  if(DEFINED TFM_IPC)
+  if(TFM_IPC)
     set(TFM_IPC_ARG -DTFM_PSA_API=ON)
     # PSA API awareness for the Non-Secure application
     target_compile_definitions(app PRIVATE "TFM_PSA_API")
@@ -49,7 +69,7 @@ function(trusted_firmware_build)
     set(TFM_ISOLATION_LEVEL_ARG -DTFM_ISOLATION_LEVEL=${TFM_ISOLATION_LEVEL})
   endif()
 
-  if(DEFINED TFM_REGRESSION)
+  if(TFM_REGRESSION)
     set(TFM_REGRESSION_ARG -DTEST_S=ON)
   endif()
 
@@ -63,6 +83,9 @@ function(trusted_firmware_build)
     set(TFM_PROFILE_ARG -DTFM_PROFILE=${TFM_BUILD_PROFILE})
   endif()
 
+  if(DEFINED TFM_MCUBOOT_IMAGE_NUMBER)
+    set(MCUBOOT_IMAGE_NUM_ARG -DMCUBOOT_IMAGE_NUMBER=${TFM_MCUBOOT_IMAGE_NUMBER})
+  endif()
 
   set(VENEERS_FILE ${TFM_BINARY_DIR}/secure_fw/s_veneers.o)
   set(PSA_API_NS_PATH ${TFM_BINARY_DIR}/interface/libpsa_api_ns.a)
@@ -120,13 +143,15 @@ function(trusted_firmware_build)
                -DTFM_PLATFORM=${TFM_BOARD}
                -DCROSS_COMPILE=${TFM_TOOLCHAIN_PATH}/${TFM_TOOLCHAIN_PREFIX}
                ${TFM_CMAKE_BUILD_TYPE_ARG}
-               ${TFM_BL2_ARG}
+               -DBL2=${TFM_BL2}
                ${TFM_IPC_ARG}
                ${TFM_ISOLATION_LEVEL_ARG}
                ${TFM_REGRESSION_ARG}
                ${TFM_PROFILE_ARG}
+               ${MCUBOOT_IMAGE_NUM_ARG}
                -DTFM_TEST_REPO_PATH=${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/tf-m-tests
                -DMCUBOOT_PATH=${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/../tfm-mcuboot
+               ${TFM_PARTITIONS_ARGS}
     BUILD_ALWAYS True
     USES_TERMINAL_BUILD True
     BUILD_BYPRODUCTS ${BUILD_BYPRODUCTS}
@@ -187,10 +212,8 @@ if (CONFIG_BUILD_WITH_TFM)
   if (CONFIG_TFM_REGRESSION)
     set(TFM_REGRESSION_ARG REGRESSION)
   endif()
-  if (CONFIG_TFM_BL2_TRUE)
-    set(TFM_BL2_ARG BL2 True)
-  elseif (CONFIG_TFM_BL2_FALSE)
-    set(TFM_BL2_ARG BL2 False)
+  if (CONFIG_TFM_BL2)
+    set(TFM_BL2_ARG BL2)
   endif()
   if (CONFIG_TFM_ISOLATION_LEVEL)
     set(TFM_ISOLATION_LEVEL_ARG ISOLATION_LEVEL ${CONFIG_TFM_ISOLATION_LEVEL})
@@ -207,15 +230,28 @@ if (CONFIG_BUILD_WITH_TFM)
   elseif (CONFIG_TFM_CMAKE_BUILD_TYPE_RELWITHDEBINFO)
     set(TFM_CMAKE_BUILD_TYPE "RelWithDebInfo")
   endif()
+  if (DEFINED CONFIG_TFM_MCUBOOT_IMAGE_NUMBER)
+    set(TFM_IMAGE_NUMBER_ARG
+        MCUBOOT_IMAGE_NUMBER ${CONFIG_TFM_MCUBOOT_IMAGE_NUMBER})
+  endif()
+
+  # Enable TFM partitions as specified in Kconfig
+  foreach(partition ${TFM_VALID_PARTITIONS})
+    if (CONFIG_${partition})
+      list(APPEND TFM_ENABLED_PARTITIONS_ARG ${partition})
+    endif()
+  endforeach()
 
   trusted_firmware_build(
     BINARY_DIR ${CMAKE_BINARY_DIR}/tfm
     BOARD ${CONFIG_TFM_BOARD}
     ${TFM_ISOLATION_LEVEL_ARG}
     ${TFM_PROFILE_ARG}
+    ${TFM_IMAGE_NUMBER_ARG}
     ${TFM_BL2_ARG}
     ${TFM_IPC_ARG}
     ${TFM_REGRESSION_ARG}
+    ENABLED_PARTITIONS ${TFM_ENABLED_PARTITIONS_ARG}
     CMAKE_BUILD_TYPE ${TFM_CMAKE_BUILD_TYPE}
   )
 
