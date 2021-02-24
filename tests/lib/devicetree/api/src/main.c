@@ -286,6 +286,9 @@ static void test_bus(void)
 #define DT_DRV_COMPAT vnd_spi_device_2
 	/* there is only one instance, and it has no CS */
 	zassert_equal(DT_INST_SPI_DEV_HAS_CS_GPIOS(0), 0, "");
+	/* since there's only one instance, we also know its bus. */
+	zassert_true(DT_SAME_NODE(TEST_SPI_NO_CS, DT_INST_BUS(0)),
+		     "expected TEST_SPI_NO_CS as bus for vnd,spi-device-2");
 
 #undef DT_DRV_COMPAT
 #define DT_DRV_COMPAT vnd_spi_device
@@ -294,6 +297,11 @@ static void test_bus(void)
 	 * either vnd,spi-device.
 	 */
 	zassert_equal(DT_INST_SPI_DEV_HAS_CS_GPIOS(0), 1, "");
+
+#define CTLR_NODE DT_INST_SPI_DEV_CS_GPIOS_CTLR(0)
+	zassert_true(DT_SAME_NODE(CTLR_NODE, DT_NODELABEL(test_gpio_1)) ||
+		     DT_SAME_NODE(CTLR_NODE, DT_NODELABEL(test_gpio_2)), "");
+#undef CTLR_NODE
 
 	zassert_true(!strncmp(gpio, DT_INST_SPI_DEV_CS_GPIOS_LABEL(0),
 			      strlen(gpio)), "");
@@ -1264,6 +1272,9 @@ static void test_cs_gpios(void)
 	zassert_equal(DT_SPI_HAS_CS_GPIOS(TEST_SPI), 1, "");
 	zassert_equal(DT_SPI_NUM_CS_GPIOS(TEST_SPI), 3, "");
 
+	zassert_equal(DT_DEP_ORD(DT_SPI_DEV_CS_GPIOS_CTLR(TEST_SPI_DEV_0)),
+		      DT_DEP_ORD(DT_NODELABEL(test_gpio_1)),
+		     "dev 0 cs gpio controller");
 	zassert_true(!strcmp(DT_SPI_DEV_CS_GPIOS_LABEL(TEST_SPI_DEV_0),
 			     "TEST_GPIO_1"), "");
 	zassert_equal(DT_SPI_DEV_CS_GPIOS_PIN(TEST_SPI_DEV_0), 0x10, "");

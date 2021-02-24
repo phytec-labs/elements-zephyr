@@ -326,7 +326,7 @@ uint16_t ll_adv_aux_max_data_length_get(void)
 
 uint8_t ll_adv_aux_set_count_get(void)
 {
-	return CONFIG_BT_CTLR_ADV_SET;
+	return BT_CTLR_ADV_SET;
 }
 
 uint8_t ll_adv_aux_set_remove(uint8_t handle)
@@ -1018,6 +1018,10 @@ static inline void sync_info_fill(struct lll_adv_sync *lll_sync,
 
 	/* NOTE: sync offset and offset unit filled by secondary prepare */
 	si->offs_units = 0U;
+	/* If sync_info is part of ADV PDU the offs_adjust field
+	 * is always set to 0.
+	 */
+	si->offs_adjust = 0U;
 	si->offs = 0U;
 
 	sync = (void *)HDR_LLL2EVT(lll_sync);

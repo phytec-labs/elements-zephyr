@@ -225,6 +225,8 @@ source "drivers/spi/Kconfig.xlnx"
 
 source "drivers/spi/Kconfig.esp32"
 
+source "drivers/spi/Kconfig.test"
+
 source "drivers/spi/Kconfig.hydrogen"
 
 endif # SPI

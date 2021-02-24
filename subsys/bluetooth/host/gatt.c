@@ -579,11 +579,11 @@ static uint8_t gen_hash_m(const struct bt_gatt_attr *attr, uint16_t handle,
 
 	switch (u16->val) {
 	/* Attributes to hash: handle + UUID + value */
-	case 0x2800: /* GATT Primary Service */
-	case 0x2801: /* GATT Secondary Service */
-	case 0x2802: /* GATT Include Service */
-	case 0x2803: /* GATT Characteristic */
-	case 0x2900: /* GATT Characteristic Extended Properties */
+	case BT_UUID_GATT_PRIMARY_VAL:
+	case BT_UUID_GATT_SECONDARY_VAL:
+	case BT_UUID_GATT_INCLUDE_VAL:
+	case BT_UUID_GATT_CHRC_VAL:
+	case BT_UUID_GATT_CEP_VAL:
 		value = sys_cpu_to_le16(handle);
 		if (tc_cmac_update(&state->state, (uint8_t *)&value,
 				   sizeof(handle)) == TC_CRYPTO_FAIL) {
@@ -612,11 +612,11 @@ static uint8_t gen_hash_m(const struct bt_gatt_attr *attr, uint16_t handle,
 
 		break;
 	/* Attributes to hash: handle + UUID */
-	case 0x2901: /* GATT Characteristic User Descriptor */
-	case 0x2902: /* GATT Client Characteristic Configuration */
-	case 0x2903: /* GATT Server Characteristic Configuration */
-	case 0x2904: /* GATT Characteristic Presentation Format */
-	case 0x2905: /* GATT Characteristic Aggregated Format */
+	case BT_UUID_GATT_CUD_VAL:
+	case BT_UUID_GATT_CCC_VAL:
+	case BT_UUID_GATT_SCC_VAL:
+	case BT_UUID_GATT_CPF_VAL:
+	case BT_UUID_GATT_CAF_VAL:
 		value = sys_cpu_to_le16(handle);
 		if (tc_cmac_update(&state->state, (uint8_t *)&value,
 				   sizeof(handle)) == TC_CRYPTO_FAIL) {
@@ -1722,14 +1722,29 @@ ssize_t bt_gatt_attr_read_cud(struct bt_conn *conn,
 				 strlen(value));
 }
 
+struct gatt_cpf {
+	uint8_t  format;
+	int8_t   exponent;
+	uint16_t unit;
+	uint8_t  name_space;
+	uint16_t description;
+} __packed;
+
 ssize_t bt_gatt_attr_read_cpf(struct bt_conn *conn,
 			      const struct bt_gatt_attr *attr, void *buf,
 			      uint16_t len, uint16_t offset)
 {
-	const struct bt_gatt_cpf *value = attr->user_data;
+	const struct bt_gatt_cpf *cpf = attr->user_data;
+	struct gatt_cpf value;
 
-	return bt_gatt_attr_read(conn, attr, buf, len, offset, value,
-				 sizeof(*value));
+	value.format = cpf->format;
+	value.exponent = cpf->exponent;
+	value.unit = sys_cpu_to_le16(cpf->unit);
+	value.name_space = cpf->name_space;
+	value.description = sys_cpu_to_le16(cpf->description);
+
+	return bt_gatt_attr_read(conn, attr, buf, len, offset, &value,
+				 sizeof(value));
 }
 
 struct notify_data {
