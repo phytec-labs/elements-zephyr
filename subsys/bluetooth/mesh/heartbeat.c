@@ -100,9 +100,11 @@ static int heartbeat_send(const struct bt_mesh_send_cb *cb, void *cb_data)
 		.xmit = bt_mesh_net_transmit_get(),
 	};
 
-	/* Do nothing if heartbeat publication is not enabled */
-	if (pub.dst == BT_MESH_ADDR_UNASSIGNED) {
-		return 0U;
+	/* Do nothing if heartbeat publication is not enabled or the subnet is
+	 * removed.
+	 */
+	if (!tx.sub || pub.dst == BT_MESH_ADDR_UNASSIGNED) {
+		return 0;
 	}
 
 	hb.init_ttl = pub.ttl;
