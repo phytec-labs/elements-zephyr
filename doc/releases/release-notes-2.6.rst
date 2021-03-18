@@ -54,11 +54,16 @@ Deprecated in this release
 * USB HID specific macros in ``<include/usb/class/usb_hid.h>`` are deprecated
   in favor of new common HID macros defined in ``<include/usb/class/hid.h>``.
 
+* The ``CONFIG_OPENOCD_SUPPORT`` Kconfig option has been deprecated in favor
+  of ``CONFIG_DEBUG_THREAD_INFO``.
+
 ==========================
 
 Removed APIs in this release
 
 * Removed support for the old zephyr integer typedefs (u8_t, u16_t, etc...).
+
+* Removed support for k_mem_domain_destroy and k_mem_domain_remove_thread
 
 ============================
 

@@ -117,6 +117,10 @@
 	Z_ITERABLE_SECTION_ROM(bt_mesh_lpn_cb, 4)
 #endif
 
+#if defined(CONFIG_BT_MESH_PROXY)
+	Z_ITERABLE_SECTION_ROM(bt_mesh_proxy_cb, 4)
+#endif
+
 #if defined(CONFIG_EC_HOST_CMD)
 	Z_ITERABLE_SECTION_ROM(ec_host_cmd_handler, 4)
 #endif
@@ -180,6 +184,11 @@
 	} GROUP_ROM_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 
 	Z_ITERABLE_SECTION_ROM(tracing_backend, 4)
+
+	SECTION_DATA_PROLOGUE(zephyr_dbg_info,,)
+	{
+		KEEP(*(".dbg_thread_info"));
+	} GROUP_ROM_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 
 	SECTION_DATA_PROLOGUE(device_handles,,)
 	{
