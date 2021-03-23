@@ -29,6 +29,9 @@ interface and listing all issues with the `bug label
 API Changes
 ***********
 
+* The :c:func:`wait_for_usb_dfu` function now accepts a ``k_timeout_t`` argument instead of
+  using the ``CONFIG_USB_DFU_WAIT_DELAY_MS`` macro.
+
 Deprecated in this release
 
 * :c:macro:`DT_CLOCKS_LABEL_BY_IDX`, :c:macro:`DT_CLOCKS_LABEL_BY_NAME`,
@@ -76,6 +79,8 @@ Removed APIs in this release
 * Removed support for k_mem_domain_destroy and k_mem_domain_remove_thread
 
 * Removed support for counter_read and counter_get_max_relative_alarm
+
+* Removed support for device_list_get
 
 ============================
 
