@@ -811,6 +811,9 @@ void ull_conn_setup(memq_link_t *link, struct node_rx_hdr *rx)
 
 	ftr = &(rx->rx_ftr);
 
+	/* NOTE: LLL conn context SHALL be after lll_hdr in
+	 *       struct lll_adv and struct lll_scan.
+	 */
 	lll = *((struct lll_conn **)((uint8_t *)ftr->param +
 				     sizeof(struct lll_hdr)));
 	switch (lll->role) {
@@ -2015,6 +2018,42 @@ static int empty_data_start_release(struct ll_conn *conn, struct node_tx *tx)
 	return 0;
 }
 #endif /* CONFIG_BT_CTLR_LLID_DATA_START_EMPTY */
+
+/* Check transaction violation and get free ctrl tx PDU */
+static struct node_tx *ctrl_tx_rsp_mem_acquire(struct ll_conn *conn,
+					       struct node_rx_pdu *rx,
+					       int *err)
+{
+	struct node_tx *tx;
+
+	/* Ignore duplicate requests without previous being acknowledged. */
+	if (conn->common.txn_lock) {
+		/* Mark for buffer for release */
+		rx->hdr.type = NODE_RX_TYPE_RELEASE;
+
+		/* Drop request */
+		*err = 0U;
+
+		return NULL;
+	}
+
+	/* Acquire ctrl tx mem */
+	tx = mem_acquire(&mem_conn_tx_ctrl.free);
+	if (!tx) {
+		*err = -ENOBUFS;
+
+		return NULL;
+	}
+
+	/* Lock further responses to duplicate requests before previous
+	 * response is acknowledged.
+	 */
+	conn->common.txn_lock = 1U;
+
+	/* NOTE: err value not required when returning valid ctrl tx PDU */
+
+	return tx;
+}
 
 #if defined(CONFIG_BT_CTLR_LE_ENC)
 static inline void  ctrl_tx_check_and_resume(struct ll_conn *conn)
@@ -4295,13 +4334,14 @@ static inline bool ctrl_is_unexpected(struct ll_conn *conn, uint8_t opcode)
 static int unknown_rsp_send(struct ll_conn *conn, struct node_rx_pdu *rx,
 			    uint8_t type)
 {
-	struct node_tx *tx;
 	struct pdu_data *pdu;
+	struct node_tx *tx;
+	int err;
 
-	/* acquire ctrl tx mem */
-	tx = mem_acquire(&mem_conn_tx_ctrl.free);
+	/* Check transaction violation and get free ctrl tx PDU */
+	tx = ctrl_tx_rsp_mem_acquire(conn, rx, &err);
 	if (!tx) {
-		return -ENOBUFS;
+		return err;
 	}
 
 	pdu = (void *)tx->pdu;
@@ -4350,14 +4390,15 @@ static int feature_rsp_send(struct ll_conn *conn, struct node_rx_pdu *rx,
 			    struct pdu_data *pdu_rx)
 {
 	struct pdu_data_llctrl_feature_req *req;
-	struct node_tx *tx;
 	struct pdu_data *pdu_tx;
+	struct node_tx *tx;
 	uint64_t feat;
+	int err;
 
-	/* acquire tx mem */
-	tx = mem_acquire(&mem_conn_tx_ctrl.free);
+	/* Check transaction violation and get free ctrl tx PDU */
+	tx = ctrl_tx_rsp_mem_acquire(conn, rx, &err);
 	if (!tx) {
-		return -ENOBUFS;
+		return err;
 	}
 
 	/* AND the feature set to get Feature USED */
@@ -4539,11 +4580,12 @@ static int reject_ext_ind_send(struct ll_conn *conn, struct node_rx_pdu *rx,
 {
 	struct pdu_data *pdu_ctrl_tx;
 	struct node_tx *tx;
+	int err;
 
-	/* acquire tx mem */
-	tx = mem_acquire(&mem_conn_tx_ctrl.free);
+	/* Check transaction violation and get free ctrl tx PDU */
+	tx = ctrl_tx_rsp_mem_acquire(conn, rx, &err);
 	if (!tx) {
-		return -ENOBUFS;
+		return err;
 	}
 
 	pdu_ctrl_tx = (void *)tx->pdu;
@@ -4901,9 +4943,12 @@ static inline int length_req_rsp_recv(struct ll_conn *conn, memq_link_t *link,
 
 	/* Check for free ctrl tx PDU */
 	if (pdu_rx->llctrl.opcode == PDU_DATA_LLCTRL_TYPE_LENGTH_REQ) {
-		tx = mem_acquire(&mem_conn_tx_ctrl.free);
+		int err;
+
+		/* Check transaction violation and get free ctrl tx PDU */
+		tx = ctrl_tx_rsp_mem_acquire(conn, *rx, &err);
 		if (!tx) {
-			return -ENOBUFS;
+			return err;
 		}
 	}
 
@@ -5101,6 +5146,11 @@ static inline int length_req_rsp_recv(struct ll_conn *conn, memq_link_t *link,
 		if (pdu_rx->llctrl.opcode != PDU_DATA_LLCTRL_TYPE_LENGTH_RSP) {
 			mem_release(tx, &mem_conn_tx_ctrl.free);
 
+			/* Release the transacation lock, as ctrl tx PDU is not
+			 * being enqueued.
+			 */
+			conn->common.txn_lock = 0U;
+
 			/* Defer new request if previous in resize state */
 			if (conn->llcp_length.state ==
 			    LLCP_LENGTH_STATE_RESIZE) {
@@ -5133,13 +5183,14 @@ send_length_resp:
 #if defined(CONFIG_BT_CTLR_LE_PING)
 static int ping_resp_send(struct ll_conn *conn, struct node_rx_pdu *rx)
 {
-	struct node_tx *tx;
 	struct pdu_data *pdu_tx;
+	struct node_tx *tx;
+	int err;
 
-	/* acquire tx mem */
-	tx = mem_acquire(&mem_conn_tx_ctrl.free);
+	/* Check transaction violation and get free ctrl tx PDU */
+	tx = ctrl_tx_rsp_mem_acquire(conn, rx, &err);
 	if (!tx) {
-		return -ENOBUFS;
+		return err;
 	}
 
 	pdu_tx = (void *)tx->pdu;
@@ -5164,11 +5215,12 @@ static int phy_rsp_send(struct ll_conn *conn, struct node_rx_pdu *rx,
 	struct pdu_data_llctrl_phy_req *p;
 	struct pdu_data *pdu_ctrl_tx;
 	struct node_tx *tx;
+	int err;
 
-	/* acquire tx mem */
-	tx = mem_acquire(&mem_conn_tx_ctrl.free);
+	/* Check transaction violation and get free ctrl tx PDU */
+	tx = ctrl_tx_rsp_mem_acquire(conn, rx, &err);
 	if (!tx) {
-		return -ENOBUFS;
+		return err;
 	}
 
 	/* Wait for peer master to complete the procedure */
@@ -5470,6 +5522,13 @@ static inline void ctrl_tx_ack(struct ll_conn *conn, struct node_tx **tx,
 	}
 	break;
 
+	case PDU_DATA_LLCTRL_TYPE_FEATURE_RSP:
+	case PDU_DATA_LLCTRL_TYPE_PING_RSP:
+	case PDU_DATA_LLCTRL_TYPE_UNKNOWN_RSP:
+		/* Reset the transaction lock */
+		conn->common.txn_lock = 0U;
+		break;
+
 #if defined(CONFIG_BT_CTLR_LE_ENC)
 #if defined(CONFIG_BT_CENTRAL)
 	case PDU_DATA_LLCTRL_TYPE_ENC_REQ:
@@ -5542,6 +5601,12 @@ static inline void ctrl_tx_ack(struct ll_conn *conn, struct node_tx **tx,
 	case PDU_DATA_LLCTRL_TYPE_REJECT_EXT_IND:
 		if (pdu_tx->llctrl.reject_ext_ind.reject_opcode !=
 		    PDU_DATA_LLCTRL_TYPE_ENC_REQ) {
+			/* Reset the transaction lock set by connection
+			 * parameter request and PHY update procedure when
+			 * sending the Reject Ext Ind PDU.
+			 */
+			conn->common.txn_lock = 0U;
+
 			break;
 		}
 		__fallthrough;
@@ -5563,6 +5628,9 @@ static inline void ctrl_tx_ack(struct ll_conn *conn, struct node_tx **tx,
 		break;
 
 	case PDU_DATA_LLCTRL_TYPE_LENGTH_RSP:
+		/* Reset the transaction lock */
+		conn->common.txn_lock = 0U;
+
 		if (conn->llcp_length.req != conn->llcp_length.ack) {
 			switch (conn->llcp_length.state) {
 			case LLCP_LENGTH_STATE_RSP_ACK_WAIT:
@@ -5629,9 +5697,18 @@ static inline void ctrl_tx_ack(struct ll_conn *conn, struct node_tx **tx,
 			uint8_t phy_tx_time[8] = {PHY_1M, PHY_1M, PHY_2M,
 						  PHY_1M, PHY_CODED, PHY_CODED,
 						  PHY_CODED, PHY_CODED};
-			struct lll_conn *lll = &conn->lll;
+			struct lll_conn *lll;
 			uint8_t phys;
 
+			/* Reset the transaction lock when PHY update response
+			 * sent by peripheral is acknowledged.
+			 */
+			if (pdu_tx->llctrl.opcode ==
+			    PDU_DATA_LLCTRL_TYPE_PHY_RSP) {
+				conn->common.txn_lock = 0U;
+			}
+
+			lll = &conn->lll;
 			phys = conn->llcp_phy.tx | lll->phy_tx;
 			lll->phy_tx_time = phy_tx_time[phys];
 		}
