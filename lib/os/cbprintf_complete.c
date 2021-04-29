@@ -1391,34 +1391,35 @@ int cbvprintf(cbprintf_cb out, void *ctx, const char *fp, va_list ap)
 		/* If dynamic width is specified, process it,
 		 * otherwise set with if present.
 		 */
-		if (conv->width_present) {
-			if (conv->width_star) {
-				width = va_arg(ap, int);
-				if (width < 0) {
-					conv->flag_dash = true;
-					width = -width;
-				}
-			} else {
-				width = conv->width_value;
+		if (conv->width_star) {
+			width = va_arg(ap, int);
+
+			if (width < 0) {
+				conv->flag_dash = true;
+				width = -width;
 			}
+		} else if (conv->width_present) {
+			width = conv->width_value;
+		} else {
+			;
 		}
 
 		/* If dynamic precision is specified, process it, otherwise
 		 * set precision if present.  For floating point where
 		 * precision is not present use 6.
 		 */
-		if (conv->prec_present) {
-			if (conv->prec_star) {
-				int arg = va_arg(ap, int);
+		if (conv->prec_star) {
+			int arg = va_arg(ap, int);
 
-				if (arg < 0) {
-					conv->prec_present = false;
-				} else {
-					precision = arg;
-				}
+			if (arg < 0) {
+				conv->prec_present = false;
 			} else {
-				precision = conv->prec_value;
+				precision = arg;
 			}
+		} else if (conv->prec_present) {
+			precision = conv->prec_value;
+		} else {
+			;
 		}
 
 		/* Reuse width and precision memory in conv for value
