@@ -925,7 +925,7 @@ uint32_t z_vrfy_log_filter_set(struct log_backend const *const backend,
 			    int16_t src_id,
 			    uint32_t level)
 {
-	Z_OOPS(Z_SYSCALL_VERIFY_MSG(backend == 0,
+	Z_OOPS(Z_SYSCALL_VERIFY_MSG(backend == NULL,
 		"Setting per-backend filters from user mode is not supported"));
 	Z_OOPS(Z_SYSCALL_VERIFY_MSG(domain_id == CONFIG_LOG_DOMAIN_ID,
 		"Invalid log domain_id"));
@@ -966,7 +966,7 @@ void log_backend_enable(struct log_backend const *const backend,
 	/* Wakeup logger thread after attaching first backend. It might be
 	 * blocked with log messages pending.
 	 */
-	if (!backend_attached) {
+	if (IS_ENABLED(CONFIG_LOG_PROCESS_THREAD) && !backend_attached) {
 		k_sem_give(&log_process_thread_sem);
 	}
 
