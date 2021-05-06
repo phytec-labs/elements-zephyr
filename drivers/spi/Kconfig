@@ -35,6 +35,8 @@ module = SPI
 module-str = spi
 source "subsys/logging/Kconfig.template.log_config"
 
+source "drivers/spi/Kconfig.hydrogen"
+
 source "drivers/spi/Kconfig.stm32"
 
 source "drivers/spi/Kconfig.dw"
@@ -73,6 +75,6 @@ source "drivers/spi/Kconfig.esp32"
 
 source "drivers/spi/Kconfig.test"
 
-source "drivers/spi/Kconfig.hydrogen"
+source "drivers/spi/Kconfig.psoc6"
 
 endif # SPI
