@@ -64,6 +64,8 @@ config UART_DRV_CMD
 
 comment "Serial Drivers"
 
+source "drivers/serial/Kconfig.hydrogen"
+
 source "drivers/serial/Kconfig.ns16550"
 
 source "drivers/serial/Kconfig.mcux"
@@ -134,6 +136,6 @@ source "drivers/serial/Kconfig.npcx"
 
 source "drivers/serial/Kconfig.apbuart"
 
-source "drivers/serial/Kconfig.hydrogen"
+source "drivers/serial/Kconfig.rcar"
 
 endif # SERIAL

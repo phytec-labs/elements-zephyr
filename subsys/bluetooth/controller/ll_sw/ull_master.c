@@ -257,7 +257,7 @@ uint8_t ll_create_connection(uint16_t scan_interval, uint16_t scan_window,
 	conn->llcp_rx = NULL;
 	conn->llcp_cu.req = conn->llcp_cu.ack = 0;
 	conn->llcp_feature.req = conn->llcp_feature.ack = 0;
-	conn->llcp_feature.features_conn = LL_FEAT;
+	conn->llcp_feature.features_conn = ll_feat_get();
 	conn->llcp_feature.features_peer = 0;
 	conn->llcp_version.req = conn->llcp_version.ack = 0;
 	conn->llcp_version.tx = conn->llcp_version.rx = 0U;
@@ -665,8 +665,8 @@ void ull_master_cleanup(struct node_rx_hdr *rx_free)
 #endif /* CONFIG_BT_CTLR_ADV_EXT && CONFIG_BT_CTLR_PHY_CODED */
 }
 
-void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
-		      struct node_rx_ftr *ftr, struct lll_conn *lll)
+void ull_master_setup(struct node_rx_hdr *rx, struct node_rx_ftr *ftr,
+		      struct lll_conn *lll)
 {
 	uint32_t conn_offset_us, conn_interval_us;
 	uint8_t ticker_id_scan, ticker_id_conn;
@@ -679,6 +679,7 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	uint32_t ticker_status;
 	struct node_rx_cc *cc;
 	struct ll_conn *conn;
+	memq_link_t *link;
 	uint8_t chan_sel;
 
 	/* Get reference to Tx-ed CONNECT_IND PDU */
@@ -740,6 +741,11 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 #if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
 	lll->tx_pwr_lvl = RADIO_TXP_DEFAULT;
 #endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
+
+	/* Use the link stored in the node rx to enqueue connection
+	 * complete node rx towards LL context.
+	 */
+	link = rx->link;
 
 	/* Use Channel Selection Algorithm #2 if peer too supports it */
 	if (IS_ENABLED(CONFIG_BT_CTLR_CHAN_SEL_2)) {
@@ -871,8 +877,8 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 #endif
 }
 
-void ull_master_ticker_cb(uint32_t ticks_at_expire, uint32_t remainder, uint16_t lazy,
-			  uint8_t force, void *param)
+void ull_master_ticker_cb(uint32_t ticks_at_expire, uint32_t remainder,
+			  uint16_t lazy, uint8_t force, void *param)
 {
 	static memq_link_t link;
 	static struct mayfly mfy = {0, 0, &link, NULL, lll_master_prepare};
@@ -905,6 +911,17 @@ void ull_master_ticker_cb(uint32_t ticks_at_expire, uint32_t remainder, uint16_t
 		/* Handle any LL Control Procedures */
 		ret = ull_conn_llcp(conn, ticks_at_expire, lazy);
 		if (ret) {
+			/* NOTE: Under BT_CTLR_LOW_LAT, ULL_LOW context is
+			 *       disabled inside radio events, hence, abort any
+			 *       active radio event which will re-enable
+			 *       ULL_LOW context that permits ticker job to run.
+			 */
+			if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT) &&
+			    (CONFIG_BT_CTLR_LLL_PRIO ==
+			     CONFIG_BT_CTLR_ULL_LOW_PRIO)) {
+				ll_radio_state_abort();
+			}
+
 			DEBUG_RADIO_CLOSE_M(0);
 			return;
 		}

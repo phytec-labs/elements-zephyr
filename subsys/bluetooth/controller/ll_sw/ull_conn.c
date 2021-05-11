@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019 Nordic Semiconductor ASA
+ * Copyright (c) 2018-2021 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -77,6 +77,7 @@ static void ticker_update_conn_op_cb(uint32_t status, void *param);
 static void ticker_stop_conn_op_cb(uint32_t status, void *param);
 static void ticker_start_conn_op_cb(uint32_t status, void *param);
 
+static void conn_setup_adv_scan_disabled_cb(void *param);
 static inline void disable(uint16_t handle);
 static void conn_cleanup(struct ll_conn *conn, uint8_t reason);
 static void tx_ull_flush(struct ll_conn *conn);
@@ -152,7 +153,7 @@ static uint8_t force_md_cnt_calc(struct lll_conn *lll_conn, uint32_t tx_rate);
 
 #define CONN_TX_BUF_SIZE MROUND(offsetof(struct node_tx, pdu) + \
 				offsetof(struct pdu_data, lldata) + \
-				(CONFIG_BT_CTLR_TX_BUFFER_SIZE + \
+				(CONFIG_BT_BUF_ACL_TX_SIZE + \
 				BT_CTLR_USER_TX_BUFFER_OVERHEAD))
 
 /**
@@ -169,13 +170,13 @@ static uint8_t force_md_cnt_calc(struct lll_conn *lll_conn, uint32_t tx_rate);
 #define TERM_REQ   1
 #define TERM_ACKED 3
 
-static MFIFO_DEFINE(conn_tx, sizeof(struct lll_tx), CONFIG_BT_CTLR_TX_BUFFERS);
+static MFIFO_DEFINE(conn_tx, sizeof(struct lll_tx), CONFIG_BT_BUF_ACL_TX_COUNT);
 static MFIFO_DEFINE(conn_ack, sizeof(struct lll_tx),
-		    (CONFIG_BT_CTLR_TX_BUFFERS + CONN_TX_CTRL_BUFFERS));
+		    (CONFIG_BT_BUF_ACL_TX_COUNT + CONN_TX_CTRL_BUFFERS));
 
 static struct {
 	void *free;
-	uint8_t pool[CONN_TX_BUF_SIZE * CONFIG_BT_CTLR_TX_BUFFERS];
+	uint8_t pool[CONN_TX_BUF_SIZE * CONFIG_BT_BUF_ACL_TX_COUNT];
 } mem_conn_tx;
 
 static struct {
@@ -186,7 +187,7 @@ static struct {
 static struct {
 	void *free;
 	uint8_t pool[sizeof(memq_link_t) *
-		  (CONFIG_BT_CTLR_TX_BUFFERS + CONN_TX_CTRL_BUFFERS)];
+		  (CONFIG_BT_BUF_ACL_TX_COUNT + CONN_TX_CTRL_BUFFERS)];
 } mem_link_tx;
 
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
@@ -239,6 +240,11 @@ struct ll_conn *ll_connected_get(uint16_t handle)
 	return conn;
 }
 
+uint16_t ll_conn_free_count_get(void)
+{
+	return mem_free_count_get(conn_free);
+}
+
 void *ll_tx_mem_acquire(void)
 {
 	return mem_acquire(&mem_conn_tx.free);
@@ -280,7 +286,7 @@ int ll_tx_mem_enqueue(uint16_t handle, void *tx)
 		static struct mayfly mfy = {0, 0, &link, NULL, tx_demux};
 
 #if defined(CONFIG_BT_CTLR_FORCE_MD_AUTO)
-		if (tx_cnt >= CONFIG_BT_CTLR_TX_BUFFERS) {
+		if (tx_cnt >= CONFIG_BT_BUF_ACL_TX_COUNT) {
 			uint8_t previous, force_md_cnt;
 
 			force_md_cnt = force_md_cnt_calc(&conn->lll, tx_rate);
@@ -812,10 +818,21 @@ bool ull_conn_peer_connected(uint8_t own_addr_type, uint8_t *own_addr,
 }
 #endif /* CONFIG_BT_CTLR_CHECK_SAME_PEER_CONN */
 
-void ull_conn_setup(memq_link_t *link, struct node_rx_hdr *rx)
+void ull_conn_setup(memq_link_t *rx_link, struct node_rx_hdr *rx)
 {
+	static memq_link_t link;
+	static struct mayfly mfy = {0, 0, &link, NULL, NULL};
 	struct node_rx_ftr *ftr;
 	struct lll_conn *lll;
+	struct ull_hdr *hdr;
+
+	/* Pass the node rx as mayfly function parameter */
+	mfy.param = rx;
+
+	/* Store the link in the node rx so that when done event is
+	 * processed it can be used to enqueue node rx towards LL context
+	 */
+	rx->link = rx_link;
 
 	ftr = &(rx->rx_ftr);
 
@@ -824,22 +841,29 @@ void ull_conn_setup(memq_link_t *link, struct node_rx_hdr *rx)
 	 */
 	lll = *((struct lll_conn **)((uint8_t *)ftr->param +
 				     sizeof(struct lll_hdr)));
-	switch (lll->role) {
-#if defined(CONFIG_BT_CENTRAL)
-	case 0:
-		ull_master_setup(link, rx, ftr, lll);
-		break;
-#endif /* CONFIG_BT_CENTRAL */
 
-#if defined(CONFIG_BT_PERIPHERAL)
-	case 1:
-		ull_slave_setup(link, rx, ftr, lll);
-		break;
-#endif /* CONFIG_BT_PERIPHERAL */
+	/* Check for reference count and decide to setup connection
+	 * here or when done event arrives.
+	 */
+	hdr = HDR_LLL2ULL(ftr->param);
+	if (ull_ref_get(hdr)) {
+		uint32_t ret;
 
-	default:
-		LL_ASSERT(0);
-		break;
+		LL_ASSERT(!hdr->disabled_cb);
+		hdr->disabled_param = mfy.param;
+		hdr->disabled_cb = conn_setup_adv_scan_disabled_cb;
+
+		mfy.fp = lll_disable;
+		ret = mayfly_enqueue(TICKER_USER_ID_ULL_LOW,
+				     TICKER_USER_ID_LLL, 0, &mfy);
+		LL_ASSERT(!ret);
+	} else {
+		uint32_t ret;
+
+		mfy.fp = conn_setup_adv_scan_disabled_cb;
+		ret = mayfly_enqueue(TICKER_USER_ID_ULL_LOW,
+				     TICKER_USER_ID_ULL_HIGH, 0, &mfy);
+		LL_ASSERT(!ret);
 	}
 }
 
@@ -1761,7 +1785,7 @@ static int init_reset(void)
 		 sizeof(conn_pool) / sizeof(struct ll_conn), &conn_free);
 
 	/* Initialize tx pool. */
-	mem_init(mem_conn_tx.pool, CONN_TX_BUF_SIZE, CONFIG_BT_CTLR_TX_BUFFERS,
+	mem_init(mem_conn_tx.pool, CONN_TX_BUF_SIZE, CONFIG_BT_BUF_ACL_TX_COUNT,
 		 &mem_conn_tx.free);
 
 	/* Initialize tx ctrl pool. */
@@ -1770,7 +1794,7 @@ static int init_reset(void)
 
 	/* Initialize tx link pool. */
 	mem_init(mem_link_tx.pool, sizeof(memq_link_t),
-		 CONFIG_BT_CTLR_TX_BUFFERS + CONN_TX_CTRL_BUFFERS,
+		 CONFIG_BT_BUF_ACL_TX_COUNT + CONN_TX_CTRL_BUFFERS,
 		 &mem_link_tx.free);
 
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
@@ -1866,6 +1890,39 @@ static void ticker_start_conn_op_cb(uint32_t status, void *param)
 
 	p = ull_update_unmark(param);
 	LL_ASSERT(p == param);
+}
+
+static void conn_setup_adv_scan_disabled_cb(void *param)
+{
+	struct node_rx_ftr *ftr;
+	struct node_rx_hdr *rx;
+	struct lll_conn *lll;
+
+	rx = param;
+	ftr = &(rx->rx_ftr);
+
+	/* NOTE: LLL conn context SHALL be after lll_hdr in
+	 *       struct lll_adv and struct lll_scan.
+	 */
+	lll = *((struct lll_conn **)((uint8_t *)ftr->param +
+				     sizeof(struct lll_hdr)));
+	switch (lll->role) {
+#if defined(CONFIG_BT_CENTRAL)
+	case 0:
+		ull_master_setup(rx, ftr, lll);
+		break;
+#endif /* CONFIG_BT_CENTRAL */
+
+#if defined(CONFIG_BT_PERIPHERAL)
+	case 1:
+		ull_slave_setup(rx, ftr, lll);
+		break;
+#endif /* CONFIG_BT_PERIPHERAL */
+
+	default:
+		LL_ASSERT(0);
+		break;
+	}
 }
 
 static inline void disable(uint16_t handle)
@@ -3121,9 +3178,6 @@ static inline void event_fex_prep(struct ll_conn *conn)
 
 		/* procedure request acked, move to waiting state */
 		conn->llcp_feature.ack--;
-
-		/* use initial feature bitmap */
-		conn->llcp_feature.features_conn = LL_FEAT;
 
 		/* place the feature exchange req packet as next in tx queue */
 		pdu->ll_id = PDU_DATA_LLID_CTRL;
@@ -4434,7 +4488,7 @@ static inline uint64_t feat_get(uint8_t *features)
 {
 	uint64_t feat;
 
-	feat = ~LL_FEAT_BIT_MASK_VALID | sys_get_le64(features);
+	feat = sys_get_le64(features) | ~LL_FEAT_BIT_MASK_VALID;
 	feat &= LL_FEAT_BIT_MASK;
 
 	return feat;
@@ -4444,7 +4498,8 @@ static inline uint64_t feat_get(uint8_t *features)
  * Perform a logical and on octet0 and keep the remaining bits of the
  * first input parameter
  */
-static inline uint64_t feat_land_octet0(uint64_t feat_to_keep, uint64_t feat_octet0)
+static inline uint64_t feat_land_octet0(uint64_t feat_to_keep,
+					uint64_t feat_octet0)
 {
 	uint64_t feat_result;
 
@@ -4481,7 +4536,7 @@ static int feature_rsp_send(struct ll_conn *conn, struct node_rx_pdu *rx,
 	 * See BTCore V5.2, Vol. 6, Part B, chapter 5.1.4
 	 */
 	conn->llcp_feature.features_peer =
-		feat_land_octet0(feat_get(&req->features[0]), LL_FEAT);
+		feat_land_octet0(feat_get(&req->features[0]), ll_feat_get());
 
 	/* features exchanged */
 	conn->common.fex_valid = 1U;
@@ -4498,7 +4553,8 @@ static int feature_rsp_send(struct ll_conn *conn, struct node_rx_pdu *rx,
 	 * On feature response we send the local supported features.
 	 * See BTCore V5.2 VOl 6 Part B, chapter 5.1.4
 	 */
-	feat = feat_land_octet0(LL_FEAT, conn->llcp_feature.features_conn);
+	feat = feat_land_octet0(ll_feat_get(),
+				conn->llcp_feature.features_conn);
 	sys_put_le64(feat, pdu_tx->llctrl.feature_rsp.features);
 
 	ctrl_tx_sec_enqueue(conn, tx);
@@ -4525,7 +4581,7 @@ static void feature_rsp_recv(struct ll_conn *conn, struct pdu_data *pdu_rx)
 	 * See BTCore V5.2, Vol. 6, Part B, chapter 5.1.4
 	 */
 	conn->llcp_feature.features_peer =
-		feat_land_octet0(feat_get(&rsp->features[0]), LL_FEAT);
+		feat_land_octet0(feat_get(&rsp->features[0]), ll_feat_get());
 
 	/* features exchanged */
 	conn->common.fex_valid = 1U;

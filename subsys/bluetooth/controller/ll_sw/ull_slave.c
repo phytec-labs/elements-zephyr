@@ -54,8 +54,8 @@ static void ticker_op_cb(uint32_t status, void *param);
 static void ticker_update_latency_cancel_op_cb(uint32_t ticker_status,
 					       void *param);
 
-void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
-		     struct node_rx_ftr *ftr, struct lll_conn *lll)
+void ull_slave_setup(struct node_rx_hdr *rx, struct node_rx_ftr *ftr,
+		     struct lll_conn *lll)
 {
 	uint32_t conn_offset_us, conn_interval_us;
 	uint8_t ticker_id_adv, ticker_id_conn;
@@ -72,6 +72,7 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	struct node_rx_cc *cc;
 	struct ll_conn *conn;
 	uint16_t win_offset;
+	memq_link_t *link;
 	uint16_t timeout;
 	uint8_t chan_sel;
 
@@ -98,6 +99,11 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 #endif /* CONFIG_BT_CTLR_PRIVACY */
 		memcpy(peer_id_addr, peer_addr, BDADDR_SIZE);
 	}
+
+	/* Use the link stored in the node rx to enqueue connection
+	 * complete node rx towards LL context.
+	 */
+	link = rx->link;
 
 #if defined(CONFIG_BT_CTLR_CHECK_SAME_PEER_CONN)
 	uint8_t own_addr_type = pdu_adv->rx_addr;
@@ -484,6 +490,17 @@ void ull_slave_ticker_cb(uint32_t ticks_at_expire, uint32_t remainder,
 		/* Handle any LL Control Procedures */
 		ret = ull_conn_llcp(conn, ticks_at_expire, lazy);
 		if (ret) {
+			/* NOTE: Under BT_CTLR_LOW_LAT, ULL_LOW context is
+			 *       disabled inside radio events, hence, abort any
+			 *       active radio event which will re-enable
+			 *       ULL_LOW context that permits ticker job to run.
+			 */
+			if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT) &&
+			    (CONFIG_BT_CTLR_LLL_PRIO ==
+			     CONFIG_BT_CTLR_ULL_LOW_PRIO)) {
+				ll_radio_state_abort();
+			}
+
 			DEBUG_RADIO_CLOSE_S(0);
 			return;
 		}

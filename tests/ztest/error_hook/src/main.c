@@ -106,13 +106,13 @@ __no_optimization static void trigger_fault_divide_zero(void)
 
 /*
  * While no optimization is enabled, some QEMU such as QEMU cortex a53
- * series and QEMU mps2 series board will not trigger an exception for
- * divide zero. They might need to enable the divide zero exception.
- * We only skip the QEMU board here, this means this test will still
- * apply on the physical board.
+ * series, QEMU mps2 series and QEMU ARC series boards will not trigger
+ * an exception for divide zero. They might need to enable the divide
+ * zero exception. We only skip the QEMU board here, this means this
+ * test will still apply on the physical board.
  */
 #if (defined(CONFIG_SOC_SERIES_MPS2) && (CONFIG_QEMU_TARGET)) || \
-	(CONFIG_BOARD_QEMU_CORTEX_A53)
+	(CONFIG_BOARD_QEMU_CORTEX_A53) || (CONFIG_SOC_QEMU_ARC)
 	ztest_test_skip();
 #endif
 }
@@ -341,8 +341,8 @@ void test_main(void)
 	ztest_test_suite(error_hook_tests,
 			 ztest_user_unit_test(test_catch_assert_fail),
 			 ztest_user_unit_test(test_catch_fatal_error),
-			 ztest_unit_test(test_catch_assert_in_isr),
-			 ztest_unit_test(test_catch_z_oops)
+			 ztest_unit_test(test_catch_z_oops),
+			 ztest_unit_test(test_catch_assert_in_isr)
 			 );
 	ztest_run_test_suite(error_hook_tests);
 #else
