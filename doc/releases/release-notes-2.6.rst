@@ -232,6 +232,19 @@ Boards & SoC Support
 
 * Added support for these SoC series:
 
+  * STM32F205xx
+  * STM32G03yxx, STM32G05yxx, STM32G070xx and STM32G0byxx
+  * STM32G4x1, STM32G4x3 and STM32G484xE
+  * STM32WL55xx
+  * Nuvoton npcx7m6fc, and npcx7m6fc
+  * Renesas RCar Gen3
+  * Silicon Labs EFR32FG13P
+  * ARM MPS3-AN547
+  * ARM FVP-AEMv8A
+  * ARM FVP-AEMv8R
+  * NXP LS1046A
+  * X86 Lakemont
+
 * Removed support for these SoC series:
 
    * ARM Musca-A
@@ -239,6 +252,9 @@ Boards & SoC Support
 * Made these changes in other SoC series:
 
   * Added Cypress PSoC-6 pinctrl support.
+  * STM32 L4/L5/WB series were updated for better power management support (CONFIG_PM=y).
+  * Backup SRAM added on a selection of STM32 series (F2/F4/F7/H7)
+  * Set TRACE_MODE to asynchronous and enable trace output pin on STM32 SoCs
 
 * Changes for ARC boards:
 
@@ -249,7 +265,33 @@ Boards & SoC Support
 
 * Added support for these ARM boards:
 
+   * Actinius Icarus
+   * Actinius Icarus SoM
+   * Laird Connectivity BL654 Sensor Board
+   * Laird Connectivity Sentrius BT6x0 Sensor
+   * EFR32 Radio BRD4255A Board
    * MPS3-AN547
+   * RAK4631
+   * Renesas R-Car H3ULCB
+   * Ronoth LoDev (based on AcSIP S76S / STM32L073)
+   * nRF9160 Thing Plus
+   * ST Nucleo F030R8
+   * ST Nucleo G0B1RE
+   * ST Nucleo H753ZI
+   * ST Nucleo L412RP-P
+   * ST Nucleo WL55JC
+   * ST STM32G071B Discovery
+   * Thingy:53
+   * u-blox EVK-BMD-30/35: BMD-300-EVAL, BMD-301-EVAL, and BMD-350-EVAL
+   * u-blox EVK-BMD-330: BMD-330-EVAL
+   * u-blox EVK-BMD-34/38: BMD-340-EVAL and BMD-341-EVAL
+   * u-blox EVK-BMD-34/38: BMD-345-EVAL
+   * u-blox EVK-BMD-360: BMD-360-EVAL
+   * u-blox EVK-BMD-34/48: BMD-380-EVAL
+   * u-blox EVK-ANNA-B11x
+   * u-blox EVK NINA-B11x
+   * u-blox EVK-NINA-B3
+   * u-blox EVK NINA-B40x
 
 * Added support for these ARM64 boards:
 
@@ -278,6 +320,11 @@ Boards & SoC Support
 
 * Added support for these following shields:
 
+  * FTDI VM800C Embedded Video Engine Board
+  * Generic ST7735R Display Shield
+  * NXP FRDM-STBC-AGM01
+  * Semtech SX1272MB2DAS LoRa Shield
+
 Drivers and Sensors
 *******************
 
@@ -293,7 +340,18 @@ Drivers and Sensors
 
 * CAN
 
+  * A driver for CAN-FD based on the Bosch M_CAN IP was added. The driver
+    currently supports STM32G4 series MCUs. Additional support for Microchip
+    SAM and NXP chips is in progress.
+
+  * The CAN ISO-TP subsystem was enhanced to allow padding and fixed
+    addressing.
+
 * Clock Control
+
+  * On STM32 series, system clock configuration has been moved from Kconfig to DTS.
+    Usage of existing Kconfig dedicated symbols (CONFIG_CLOCK_STM32_FOO) is now
+    deprecated.
 
 * Console
 
@@ -305,9 +363,15 @@ Drivers and Sensors
 
 * Debug
 
+* Disk
+
+  * Added SDMMC support on STM32L4+
+
 * Display
 
 * DMA
+
+  * Added support on STM32G0 and STM32H7
 
 * EEPROM
 
@@ -323,6 +387,8 @@ Drivers and Sensors
     application to use PTP clock without enabling gPTP support.
   * Converted clock control to use DEVICE_DT_GET in mcux driver.
   * Changed to allow changing MAC address in gmac driver.
+  * Driver for STM32H7 is now using specific memory layout to fit DMA constraints
+    for RAM accesses.
 
 * Flash
 
@@ -337,6 +403,7 @@ Drivers and Sensors
     implementation if it is present in the API table.
     Out-of-tree drivers must be updated before the wrapping in the shims is
     removed when the deprecation period ends.
+  * Added QSPI support on STM32F7.
 
 * GPIO
 
@@ -354,10 +421,13 @@ Drivers and Sensors
     The feature has been deprecated in the Zephyr 2.2 release. The interrupt
     flags are now accepted by :c:func:`gpio_pin_interrupt_configure()`
     function only.
+  * STM32 GPIO driver now supports clock gating using PM_DEVICE and PM_DEVICE_RUNTIME
 
 * Hardware Info
 
 * I2C
+
+  * Added support on STM32F2
 
 * I2S
 
@@ -412,7 +482,11 @@ Drivers and Sensors
 
 * PWM
 
+  * Added support on STM32F2 and  STM32L1
+
 * Sensor
+
+  * Added support for STM32 internal (CPU) temperature sensor
 
 * Serial
 
@@ -421,10 +495,14 @@ Drivers and Sensors
 * SPI
 
   * Added Cypress PSoC-6 SCB[spi] driver.
+  * Default SPI_SCK configuration is now pull-down for all STM32 to minimize power
+    consumption in stop mode.
 
 * Timer
 
 * USB
+
+  * Added support on STM32H7
 
 * Video
 
@@ -626,6 +704,15 @@ Libraries / Subsystems
 * Shell
 
 * Storage
+
+* Task Watchdog
+
+  * This new subsystem was added with this release and allows supervision of
+    individual threads. It is based on a regularly updated kernel timer,
+    whose ISR is never actually called in regular system operation.
+
+    An existing hardware watchdog can be used as an optional fallback if the
+    task watchdog itself gets stuck.
 
 * Tracing
 
