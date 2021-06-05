@@ -304,11 +304,16 @@ int fcntl(int fd, int cmd, ...)
 	}
 
 	/* Handle fdtable commands. */
-	switch (cmd) {
-	case F_DUPFD:
+	if (cmd == F_DUPFD) {
 		/* Not implemented so far. */
 		errno = EINVAL;
 		return -1;
+	default:
+		/* Add an empty default with break, this is a defensive programming.
+		 * Static analysis tool won't raise a violation if default is empty,
+		 * but has that comment.
+		 */
+		break;
 	}
 
 	/* The rest of commands are per-fd, handled by ioctl vmethod. */
