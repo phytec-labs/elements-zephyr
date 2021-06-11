@@ -433,17 +433,34 @@ static bool nrf5_tx_at(struct net_pkt *pkt, bool cca)
 	uint32_t tx_at = net_pkt_txtime(pkt) / NSEC_PER_USEC;
 	bool ret;
 
-	ret = nrf_802154_transmit_raw_at(nrf5_data.tx_psdu,
-					 cca,
-					 tx_at - TXTIME_OFFSET_US,
-					 TXTIME_OFFSET_US,
-					 nrf_802154_channel_get());
+	if (net_pkt_ieee802154_frame_retry(pkt) == false) {
+		ret = nrf_802154_transmit_raw_at(nrf5_data.tx_psdu,
+						 cca,
+						 tx_at - TXTIME_OFFSET_US,
+						 TXTIME_OFFSET_US,
+						 nrf_802154_channel_get());
+	} else {
+		ret = nrf_802154_retransmit_raw_at(nrf5_data.tx_psdu,
+						   cca,
+						   tx_at - TXTIME_OFFSET_US,
+						   TXTIME_OFFSET_US,
+						   nrf_802154_channel_get());
+	}
 	if (nrf5_data.event_handler) {
 		LOG_WRN("TX_STARTED event will be triggered without delay");
 	}
 	return ret;
 }
 #endif /* CONFIG_NET_PKT_TXTIME */
+
+static void nrf5_tx_csma_ca(struct net_pkt *pkt, uint8_t *payload)
+{
+	if (net_pkt_ieee802154_frame_retry(pkt) == false) {
+		nrf_802154_transmit_csma_ca_raw(payload);
+	} else {
+		nrf_802154_retransmit_csma_ca_raw(payload);
+	}
+}
 
 static int nrf5_tx(const struct device *dev,
 		   enum ieee802154_tx_mode mode,
@@ -454,6 +471,7 @@ static int nrf5_tx(const struct device *dev,
 	uint8_t payload_len = frag->len;
 	uint8_t *payload = frag->data;
 	bool ret = true;
+	int result;
 
 	LOG_DBG("%p (%u)", payload, payload_len);
 
@@ -471,7 +489,7 @@ static int nrf5_tx(const struct device *dev,
 		ret = nrf_802154_transmit_raw(nrf5_radio->tx_psdu, true);
 		break;
 	case IEEE802154_TX_MODE_CSMA_CA:
-		nrf_802154_transmit_csma_ca_raw(nrf5_radio->tx_psdu);
+		nrf5_tx_csma_ca(pkt, nrf5_radio->tx_psdu);
 		break;
 /* This function cannot be used in the serialized version yet. */
 #if defined(CONFIG_NET_PKT_TXTIME) && !defined(CONFIG_NRF_802154_SER_HOST)
@@ -511,19 +529,32 @@ static int nrf5_tx(const struct device *dev,
 		/* Handle ACK packet. */
 		return handle_ack(nrf5_radio);
 	case NRF_802154_TX_ERROR_NO_MEM:
-		return -ENOBUFS;
+		result = -ENOBUFS;
 	case NRF_802154_TX_ERROR_BUSY_CHANNEL:
-		return -EBUSY;
+		result = -EBUSY;
 	case NRF_802154_TX_ERROR_INVALID_ACK:
 	case NRF_802154_TX_ERROR_NO_ACK:
-		return -ENOMSG;
+		result = -ENOMSG;
 	case NRF_802154_TX_ERROR_ABORTED:
 	case NRF_802154_TX_ERROR_TIMESLOT_DENIED:
 	case NRF_802154_TX_ERROR_TIMESLOT_ENDED:
-		return -EIO;
+	default:
+		result = -EIO;
 	}
 
-	return -EIO;
+#if NRF_802154_ENCRYPTION_ENABLED
+	/*
+	 * When frame encryption by the radio driver is enabled,
+	 * the frame stored in the tx_psdu buffer is authenticated
+	 * and encrypted in place. After an unsuccessful TX attempt,
+	 * this frame must be propagated back to the upper layer
+	 * for retransmission. The upper layer must ensure that the
+	 * excact same secured frame is used for retransmission.
+	 */
+	memcpy(payload, nrf5_radio->tx_psdu + 1, payload_len);
+#endif
+
+	return result;
 }
 
 static uint64_t nrf5_get_time(const struct device *dev)
