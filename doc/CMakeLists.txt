@@ -13,10 +13,12 @@ message(STATUS "Zephyr base: ${ZEPHYR_BASE}")
 # Options
 
 set(SPHINXOPTS "-j auto" CACHE STRING "Default Sphinx Options")
+set(LATEXMKOPTS "-halt-on-error -no-shell-escape" CACHE STRING "Default latexmk options")
 set(DOC_TAG "development" CACHE STRING "Documentation tag")
 set(DTS_ROOTS "${ZEPHYR_BASE}" CACHE STRING "DT bindings root folders")
 
 separate_arguments(SPHINXOPTS)
+separate_arguments(LATEXMKOPTS)
 
 #-------------------------------------------------------------------------------
 # Dependencies
@@ -248,12 +250,23 @@ set_target_properties(
 add_dependencies(latex kconfig devicetree)
 
 if(LATEX_PDFLATEX_FOUND AND LATEXMK)
+  if(WIN32)
+    set(PDF_BUILD_COMMAND "make.bat")
+  else()
+    find_program(MAKE make)
+    if(NOT MAKE)
+      message(FATAL_ERROR "The 'make' command was not found")
+    endif()
+    set(PDF_BUILD_COMMAND ${MAKE})
+  endif()
+
   add_custom_target(
     pdf
-    COMMAND ${CMAKE_COMMAND} -E env LATEXOPTS="-halt-on-error -no-shell-escape"
-    ${LATEXMK} -quiet -pdf -dvi- -ps-
+    COMMAND ${CMAKE_COMMAND} -E env LATEXMKOPTS="${LATEXMKOPTS}"
+    ${PDF_BUILD_COMMAND}
     WORKING_DIRECTORY ${DOCS_LATEX_DIR}
     COMMENT "Building PDF file..."
+    USES_TERMINAL
   )
 
   add_dependencies(pdf latex)
