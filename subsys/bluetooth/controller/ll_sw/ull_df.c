@@ -297,11 +297,8 @@ uint8_t ll_df_set_cl_cte_tx_enable(uint8_t adv_handle, uint8_t cte_enable)
 			return BT_HCI_ERR_CMD_DISALLOWED;
 		}
 
-		err = ull_adv_sync_pdu_alloc(adv, 0,
-					     ULL_ADV_PDU_HDR_FIELD_CTE_INFO,
-					     NULL, &pdu_prev, &pdu,
-					     &extra_data_prev, &extra_data,
-					     &ter_idx);
+		err = ull_adv_sync_pdu_alloc(adv, ULL_ADV_PDU_EXTRA_DATA_ALLOC_NEVER, &pdu_prev,
+					     &pdu, &extra_data_prev, &extra_data, &ter_idx);
 		if (err) {
 			return err;
 		}
@@ -323,7 +320,7 @@ uint8_t ll_df_set_cl_cte_tx_enable(uint8_t adv_handle, uint8_t cte_enable)
 		df_cfg->is_enabled = 0U;
 	} else {
 		struct pdu_cte_info cte_info;
-		struct ull_adv_ext_hdr_data hdr_data;
+		void *hdr_data;
 
 		if (df_cfg->is_enabled) {
 			return BT_HCI_ERR_CMD_DISALLOWED;
@@ -331,12 +328,10 @@ uint8_t ll_df_set_cl_cte_tx_enable(uint8_t adv_handle, uint8_t cte_enable)
 
 		cte_info.type = df_cfg->cte_type;
 		cte_info.time = df_cfg->cte_length;
-		hdr_data.field_data = (uint8_t *)&cte_info;
-		hdr_data.extra_data = df_cfg;
+		hdr_data = (uint8_t *)&cte_info;
 
-		err = ull_adv_sync_pdu_alloc(adv, ULL_ADV_PDU_HDR_FIELD_CTE_INFO, 0, NULL,
-					     &pdu_prev, &pdu, &extra_data_prev, &extra_data,
-					     &ter_idx);
+		err = ull_adv_sync_pdu_alloc(adv, ULL_ADV_PDU_EXTRA_DATA_ALLOC_ALWAYS, &pdu_prev,
+					     &pdu, &extra_data_prev, &extra_data, &ter_idx);
 		if (err) {
 			return err;
 		}
@@ -344,12 +339,11 @@ uint8_t ll_df_set_cl_cte_tx_enable(uint8_t adv_handle, uint8_t cte_enable)
 		if (extra_data) {
 			ull_adv_sync_extra_data_set_clear(extra_data_prev, extra_data,
 							  ULL_ADV_PDU_HDR_FIELD_CTE_INFO, 0,
-							  &df_cfg);
+							  df_cfg);
 		}
 
 		err = ull_adv_sync_pdu_set_clear(lll_sync, pdu_prev, pdu,
-						 ULL_ADV_PDU_HDR_FIELD_CTE_INFO,
-						 0, &hdr_data);
+						 ULL_ADV_PDU_HDR_FIELD_CTE_INFO, 0, hdr_data);
 		if (err) {
 			return err;
 		}
