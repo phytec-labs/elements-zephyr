@@ -237,6 +237,10 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 				0x00  /* PDU_ADV_TYPE_ADV_IND */
 			};
 
+			if (evt_prop & BT_HCI_LE_ADV_PROP_ANON) {
+				return BT_HCI_ERR_UNSUPP_FEATURE_PARAM_VAL;
+			}
+
 			adv_type = leg_adv_type[evt_prop & 0x03];
 
 			/* high duty cycle directed */
@@ -299,8 +303,12 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 	pdu = lll_adv_data_peek(&adv->lll);
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 	if (is_new_set) {
-		pdu->type = pdu_adv_type[adv_type];
 		is_pdu_type_changed = 1;
+
+		pdu->type = pdu_adv_type[adv_type];
+		if (pdu->type != PDU_ADV_TYPE_EXT_IND) {
+			pdu->len = 0U;
+		}
 	/* check if new PDU type is different that past one */
 	} else if (pdu->type != pdu_adv_type[adv_type]) {
 		is_pdu_type_changed = 1;
@@ -420,6 +428,10 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 			pdu->tx_addr = 0;
 		}
 
+		/* TargetA flag */
+		if (pri_hdr_prev.tgt_addr) {
+			pri_dptr_prev += BDADDR_SIZE;
+		}
 		/* TargetA flag in primary channel PDU only for directed */
 		if (evt_prop & BT_HCI_LE_ADV_PROP_DIRECT) {
 			pri_hdr->tgt_addr = 1;
@@ -433,12 +445,17 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 
 		/* ADI flag */
 		if (pri_hdr_prev.adi) {
+			pri_dptr_prev += sizeof(struct pdu_adv_adi);
+
 			pri_hdr->adi = 1;
 			pri_dptr += sizeof(struct pdu_adv_adi);
 		}
 
 #if (CONFIG_BT_CTLR_ADV_AUX_SET > 0)
 		/* AuxPtr flag */
+		if (pri_hdr_prev.aux_ptr) {
+			pri_dptr_prev += sizeof(struct pdu_adv_aux_ptr);
+		}
 		/* Need aux for connectable or scannable extended advertising */
 		if (pri_hdr_prev.aux_ptr ||
 		    ((evt_prop & (BT_HCI_LE_ADV_PROP_CONN |
@@ -451,13 +468,16 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 		/* No SyncInfo flag in primary channel PDU */
 
 		/* Tx Power flag */
+		if (pri_hdr_prev.tx_pwr) {
+			pri_dptr_prev += sizeof(uint8_t);
+		}
 		/* C1, Tx Power is optional on the LE 1M PHY, and reserved for
 		 * for future use on the LE Coded PHY.
 		 */
 		if ((evt_prop & BT_HCI_LE_ADV_PROP_TX_POWER) &&
 		    (!pri_hdr_prev.aux_ptr || (phy_p != PHY_CODED))) {
 			pri_hdr->tx_pwr = 1;
-			pri_dptr++;
+			pri_dptr += sizeof(uint8_t);
 		}
 
 		/* Calc primary PDU len */
@@ -474,6 +494,9 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 		/* No ACAD in primary channel PDU */
 
 		/* Tx Power */
+		if (pri_hdr_prev.tx_pwr) {
+			pri_dptr_prev -= sizeof(uint8_t);
+		}
 		if (pri_hdr->tx_pwr) {
 			uint8_t _tx_pwr;
 
@@ -486,13 +509,17 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 				}
 			}
 
-			*--pri_dptr = _tx_pwr;
+			pri_dptr -= sizeof(uint8_t);
+			*pri_dptr = _tx_pwr;
 		}
 
 		/* No SyncInfo in primary channel PDU */
 
 #if (CONFIG_BT_CTLR_ADV_AUX_SET > 0)
 		/* AuxPtr */
+		if (pri_hdr_prev.aux_ptr) {
+			pri_dptr_prev -= sizeof(struct pdu_adv_aux_ptr);
+		}
 		if (pri_hdr->aux_ptr) {
 			ull_adv_aux_ptr_fill(&pri_dptr, phy_s);
 		}
@@ -500,14 +527,17 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 #endif /* (CONFIG_BT_CTLR_ADV_AUX_SET > 0) */
 
 		/* ADI */
+		if (pri_hdr_prev.adi) {
+			pri_dptr_prev -= sizeof(struct pdu_adv_adi);
+		}
 		if (pri_hdr->adi) {
 			struct pdu_adv_adi *adi;
 
 			pri_dptr -= sizeof(struct pdu_adv_adi);
 
-			/* NOTE: memcpy shall handle overlapping buffers */
-			memcpy(pri_dptr, pri_dptr_prev,
-			       sizeof(struct pdu_adv_adi));
+			/* NOTE: memmove shall handle overlapping buffers */
+			memmove(pri_dptr, pri_dptr_prev,
+				sizeof(struct pdu_adv_adi));
 
 			adi = (void *)pri_dptr;
 			adi->sid = sid;
@@ -517,6 +547,9 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 		/* No CTEInfo field in primary channel PDU */
 
 		/* TargetA */
+		if (pri_hdr_prev.tgt_addr) {
+			pri_dptr_prev -= BDADDR_SIZE;
+		}
 		if (pri_hdr->tgt_addr) {
 			pri_dptr -= BDADDR_SIZE;
 			/* NOTE: RPA will be updated on enable, if needed */
@@ -1653,7 +1686,7 @@ void ull_adv_done(struct node_rx_event_done *done)
 		rx_hdr = (void *)lll->node_rx_adv_term;
 		rx_hdr->rx_ftr.param_adv_term.status = BT_HCI_ERR_LIMIT_REACHED;
 	} else if (adv->ticks_remain_duration &&
-		   (adv->ticks_remain_duration <
+		   (adv->ticks_remain_duration <=
 		    HAL_TICKER_US_TO_TICKS((uint64_t)adv->interval *
 			ADV_INT_UNIT_US))) {
 		adv->ticks_remain_duration = 0;
@@ -1929,13 +1962,17 @@ static void ticker_cb(uint32_t ticks_at_expire, uint32_t remainder, uint16_t laz
 			uint32_t ticks_interval =
 				HAL_TICKER_US_TO_TICKS((uint64_t)adv->interval *
 						       ADV_INT_UNIT_US);
-			if (adv->ticks_remain_duration > ticks_interval) {
-				adv->ticks_remain_duration -= ticks_interval;
+			uint32_t ticks_elapsed = ticks_interval * (lazy + 1);
+
+			if (adv->ticks_remain_duration > ticks_elapsed) {
+				adv->ticks_remain_duration -= ticks_elapsed;
 
 				if (adv->ticks_remain_duration > random_delay) {
 					adv->ticks_remain_duration -=
 						random_delay;
 				}
+			} else {
+				adv->ticks_remain_duration = ticks_interval;
 			}
 		}
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
